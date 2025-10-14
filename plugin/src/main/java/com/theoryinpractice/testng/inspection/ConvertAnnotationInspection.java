@@ -27,155 +27,128 @@ import consulo.language.editor.inspection.ProblemsHolder;
 import consulo.language.psi.PsiElement;
 import consulo.language.psi.PsiElementVisitor;
 import consulo.language.util.IncorrectOperationException;
+import consulo.localize.LocalizeValue;
 import consulo.logging.Logger;
 import consulo.project.Project;
 import consulo.util.lang.StringUtil;
 import jakarta.annotation.Nonnull;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
 
 /**
- * @author Hani Suleiman Date: Aug 3, 2005 Time: 4:17:59 PM
+ * @author Hani Suleiman
+ * @since 2005-08-03
  */
 @ExtensionImpl
-public class ConvertAnnotationInspection extends BaseJavaLocalInspectionTool
-{
-	private static final String DISPLAY_NAME = "Convert TestNG annotations to javadocs";
+public class ConvertAnnotationInspection extends BaseJavaLocalInspectionTool {
+    private static final LocalizeValue DISPLAY_NAME = LocalizeValue.localizeTODO("Convert TestNG annotations to javadocs");
 
-	@NotNull
-	public PsiElementVisitor buildVisitorImpl(@Nonnull ProblemsHolder holder, boolean isOnTheFly, LocalInspectionToolSession session, Object o)
-	{
-		return new JavaElementVisitor()
-		{
-			@Override
-			public void visitAnnotation(final PsiAnnotation annotation)
-			{
-				final @NonNls String qualifiedName = annotation.getQualifiedName();
-				if(qualifiedName != null && qualifiedName.startsWith("org.testng.annotations"))
-				{
-					holder.registerProblem(annotation, DISPLAY_NAME, new ConvertAnnotationQuickFix());
-				}
-			}
-		};
-	}
+    @Nonnull
+    public PsiElementVisitor buildVisitorImpl(
+        @Nonnull ProblemsHolder holder,
+        boolean isOnTheFly,
+        LocalInspectionToolSession session,
+        Object o
+    ) {
+        return new JavaElementVisitor() {
+            @Override
+            public void visitAnnotation(final PsiAnnotation annotation) {
+                final String qualifiedName = annotation.getQualifiedName();
+                if (qualifiedName != null && qualifiedName.startsWith("org.testng.annotations")) {
+                    holder.registerProblem(annotation, DISPLAY_NAME.get(), new ConvertAnnotationQuickFix());
+                }
+            }
+        };
+    }
 
 
-	@Override
-	public boolean isEnabledByDefault()
-	{
-		return false;
-	}
+    @Override
+    public boolean isEnabledByDefault() {
+        return false;
+    }
 
-	@Nls
-	@NotNull
-	public String getGroupDisplayName()
-	{
-		return TestNGUtil.TESTNG_GROUP_NAME;
-	}
+    @Nonnull
+    @Override
+    public LocalizeValue getGroupDisplayName() {
+        return TestNGUtil.TESTNG_GROUP_NAME;
+    }
 
-	@Nls
-	@NotNull
-	public String getDisplayName()
-	{
-		return DISPLAY_NAME;
-	}
+    @Nonnull
+    @Override
+    public LocalizeValue getDisplayName() {
+        return DISPLAY_NAME;
+    }
 
-	@NonNls
-	@NotNull
-	public String getShortName()
-	{
-		return "ConvertAnnotations";
-	}
+    @Nonnull
+    public String getShortName() {
+        return "ConvertAnnotations";
+    }
 
-	private static class ConvertAnnotationQuickFix implements LocalQuickFix
-	{
-		private static final Logger LOG = Logger.getInstance("#" + ConvertAnnotationQuickFix.class.getName());
+    private static class ConvertAnnotationQuickFix implements LocalQuickFix {
+        private static final Logger LOG = Logger.getInstance("#" + ConvertAnnotationQuickFix.class.getName());
 
-		@NotNull
-		public String getName()
-		{
-			return DISPLAY_NAME;
-		}
+        @Nonnull
+        @Override
+        public LocalizeValue getName() {
+            return DISPLAY_NAME;
+        }
 
-		@NotNull
-		public String getFamilyName()
-		{
-			return DISPLAY_NAME;
-		}
+        public void applyFix(@Nonnull Project project, @Nonnull ProblemDescriptor descriptor) {
+            final PsiAnnotation annotation = (PsiAnnotation) descriptor.getPsiElement();
+            final PsiElement parent = annotation.getParent();
+            if (parent instanceof PsiModifierList) {
+                try {
+                    final PsiModifierListOwner element = (PsiModifierListOwner) parent.getParent();
+                    final PsiElementFactory factory = JavaPsiFacade.getInstance(element.getProject()).getElementFactory();
+                    PsiDocComment docComment = ((PsiDocCommentOwner) element).getDocComment();
+                    if (docComment == null) {
+                        docComment = factory.createDocCommentFromText("/**\n */");
+                        docComment = (PsiDocComment) element.addBefore(docComment, parent);
+                    }
+                    StringBuilder text = new StringBuilder(convertAnnotationClassToJavadocElement(annotation.getQualifiedName()));
+                    PsiAnnotationParameterList list = annotation.getParameterList();
+                    for (PsiNameValuePair pair : list.getAttributes()) {
+                        text.append(' ');
+                        if (pair.getName() != null) {
+                            text.append(pair.getName());
+                        }
+                        else {
+                            text.append("value");
+                        }
+                        text.append(" = \"");
 
-		public void applyFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor)
-		{
-			final PsiAnnotation annotation = (PsiAnnotation) descriptor.getPsiElement();
-			final PsiElement parent = annotation.getParent();
-			if(parent instanceof PsiModifierList)
-			{
-				try
-				{
-					final PsiModifierListOwner element = (PsiModifierListOwner) parent.getParent();
-					final PsiElementFactory factory = JavaPsiFacade.getInstance(element.getProject()).getElementFactory();
-					PsiDocComment docComment = ((PsiDocCommentOwner) element).getDocComment();
-					if(docComment == null)
-					{
-						docComment = factory.createDocCommentFromText("/**\n */");
-						docComment = (PsiDocComment) element.addBefore(docComment, parent);
-					}
-					@NonNls StringBuffer text = new StringBuffer(convertAnnotationClassToJavadocElement(annotation.getQualifiedName()));
-					PsiAnnotationParameterList list = annotation.getParameterList();
-					for(PsiNameValuePair pair : list.getAttributes())
-					{
-						text.append(' ');
-						if(pair.getName() != null)
-						{
-							text.append(pair.getName());
-						}
-						else
-						{
-							text.append("value");
-						}
-						text.append(" = \"");
+                        String parameterText = StringUtil.stripQuotesAroundValue(pair.getValue().getText());
+                        if (parameterText.startsWith("{")) {
+                            parameterText = parameterText.replaceAll("(\\{\\\"|\\\"\\}|\\\"\\w*\\s*\\,\\s*\\w*\\\")", " ").trim();
+                        }
+                        text.append(parameterText);
+                        text.append('\"');
+                    }
+                    docComment.addAfter(factory.createDocTagFromText('@' + text.toString()), docComment.getFirstChild());
+                    annotation.delete();
+                }
+                catch (IncorrectOperationException e) {
+                    LOG.error(e);
+                }
+            }
+        }
 
-						@NonNls String parameterText = StringUtil.stripQuotesAroundValue(pair.getValue().getText());
-						if(parameterText.startsWith("{"))
-						{
-							parameterText = parameterText.replaceAll("(\\{\\\"|\\\"\\}|\\\"\\w*\\s*\\,\\s*\\w*\\\")", " ").trim();
-						}
-						text.append(parameterText);
-						text.append('\"');
-					}
-					docComment.addAfter(factory.createDocTagFromText('@' + text.toString()), docComment.getFirstChild());
-					annotation.delete();
-				}
-				catch(IncorrectOperationException e)
-				{
-					LOG.error(e);
-				}
-			}
-		}
+        private static String convertAnnotationClassToJavadocElement(String annotationFqn) {
+            char[] chars = annotationFqn.replace("org.testng.annotations", "testng").toCharArray();
 
-		private static String convertAnnotationClassToJavadocElement(@NonNls String annotationFqn)
-		{
-			char[] chars = annotationFqn.replace("org.testng.annotations", "testng").toCharArray();
+            boolean skippedFirst = false;
+            StringBuffer sb = new StringBuffer();
+            for (char aChar : chars) {
+                if ((aChar >= 'A') && (aChar <= 'Z')) {
+                    if (skippedFirst) {
+                        sb.append('-');
+                    }
+                    else {
+                        skippedFirst = true;
+                    }
+                }
+                sb.append(String.valueOf(aChar));
+            }
 
-			boolean skippedFirst = false;
-			StringBuffer sb = new StringBuffer();
-			for(char aChar : chars)
-			{
-				if((aChar >= 'A') && (aChar <= 'Z'))
-				{
-					if(skippedFirst)
-					{
-						sb.append('-');
-					}
-					else
-					{
-						skippedFirst = true;
-					}
-				}
-				sb.append(String.valueOf(aChar));
-			}
-
-			return sb.toString().toLowerCase();
-		}
-	}
+            return sb.toString().toLowerCase();
+        }
+    }
 }
