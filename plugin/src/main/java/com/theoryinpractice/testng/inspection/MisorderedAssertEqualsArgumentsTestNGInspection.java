@@ -27,9 +27,8 @@ import consulo.language.psi.PsiElement;
 import consulo.language.psi.PsiElementVisitor;
 import consulo.language.psi.PsiManager;
 import consulo.language.psi.scope.GlobalSearchScope;
+import consulo.localize.LocalizeValue;
 import consulo.project.Project;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
 
 import jakarta.annotation.Nonnull;
 
@@ -37,242 +36,199 @@ import jakarta.annotation.Nonnull;
  * @author Bas Leijdekkers
  */
 @ExtensionImpl
-public class MisorderedAssertEqualsArgumentsTestNGInspection extends BaseJavaLocalInspectionTool
-{
-	private static class FlipParametersFix implements LocalQuickFix
-	{
+public class MisorderedAssertEqualsArgumentsTestNGInspection extends BaseJavaLocalInspectionTool {
+    private static class FlipParametersFix implements LocalQuickFix {
+        @Nonnull
+        @Override
+        public LocalizeValue getName() {
+            return LocalizeValue.localizeTODO("Flip compared arguments");
+        }
 
-		@Override
-		@NotNull
-		public String getName()
-		{
-			return "Flip compared arguments";
-		}
+        @Override
+        public void applyFix(@Nonnull Project project, @Nonnull ProblemDescriptor descriptor) {
+            final PsiElement methodNameIdentifier = descriptor.getPsiElement();
+            final PsiElement parent = methodNameIdentifier.getParent();
+            if (parent == null) {
+                return;
+            }
+            final PsiMethodCallExpression callExpression = (PsiMethodCallExpression) parent.getParent();
+            if (callExpression == null) {
+                return;
+            }
+            final PsiReferenceExpression methodExpression = callExpression.getMethodExpression();
+            final PsiMethod method = (PsiMethod) methodExpression.resolve();
+            if (method == null) {
+                return;
+            }
+            final PsiClass containingClass = method.getContainingClass();
+            final boolean junit;
+            if (InheritanceUtil.isInheritor(containingClass, "org.testng.Assert")) {
+                junit = false;
+            }
+            else if (InheritanceUtil.isInheritor(containingClass, "org.testng.AssertJUnit")) {
+                junit = true;
+            }
+            else {
+                return;
+            }
+            final PsiParameterList parameterList = method.getParameterList();
+            final PsiParameter[] parameters = parameterList.getParameters();
+            final PsiManager psiManager = callExpression.getManager();
+            final GlobalSearchScope scope = GlobalSearchScope.allScope(project);
+            final PsiType stringType = PsiType.getJavaLangString(psiManager, scope);
+            final PsiType parameterType1 = parameters[0].getType();
+            final PsiExpressionList argumentList = callExpression.getArgumentList();
+            final PsiExpression[] arguments = argumentList.getExpressions();
+            final PsiExpression expectedArgument;
+            final PsiExpression actualArgument;
+            if (junit) {
+                if (parameterType1.equals(stringType) && parameters.length > 2) {
+                    expectedArgument = arguments[1];
+                    actualArgument = arguments[2];
+                }
+                else {
+                    expectedArgument = arguments[0];
+                    actualArgument = arguments[1];
+                }
+            }
+            else {
+                actualArgument = arguments[0];
+                expectedArgument = arguments[1];
+            }
+            final PsiElement copy = expectedArgument.copy();
+            expectedArgument.replace(actualArgument);
+            actualArgument.replace(copy);
+        }
+    }
 
-		@NotNull
-		@Override
-		public String getFamilyName()
-		{
-			return getName();
-		}
+    @Nonnull
+    @Override
+    public LocalizeValue getGroupDisplayName() {
+        return LocalizeValue.localizeTODO("TestNG");
+    }
 
-		@Override
-		public void applyFix(@NotNull Project project, @NotNull ProblemDescriptor descriptor)
-		{
-			final PsiElement methodNameIdentifier = descriptor.getPsiElement();
-			final PsiElement parent = methodNameIdentifier.getParent();
-			if(parent == null)
-			{
-				return;
-			}
-			final PsiMethodCallExpression callExpression = (PsiMethodCallExpression) parent.getParent();
-			if(callExpression == null)
-			{
-				return;
-			}
-			final PsiReferenceExpression methodExpression = callExpression.getMethodExpression();
-			final PsiMethod method = (PsiMethod) methodExpression.resolve();
-			if(method == null)
-			{
-				return;
-			}
-			final PsiClass containingClass = method.getContainingClass();
-			final boolean junit;
-			if(InheritanceUtil.isInheritor(containingClass, "org.testng.Assert"))
-			{
-				junit = false;
-			}
-			else if(InheritanceUtil.isInheritor(containingClass, "org.testng.AssertJUnit"))
-			{
-				junit = true;
-			}
-			else
-			{
-				return;
-			}
-			final PsiParameterList parameterList = method.getParameterList();
-			final PsiParameter[] parameters = parameterList.getParameters();
-			final PsiManager psiManager = callExpression.getManager();
-			final GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-			final PsiType stringType = PsiType.getJavaLangString(psiManager, scope);
-			final PsiType parameterType1 = parameters[0].getType();
-			final PsiExpressionList argumentList = callExpression.getArgumentList();
-			final PsiExpression[] arguments = argumentList.getExpressions();
-			final PsiExpression expectedArgument;
-			final PsiExpression actualArgument;
-			if(junit)
-			{
-				if(parameterType1.equals(stringType) && parameters.length > 2)
-				{
-					expectedArgument = arguments[1];
-					actualArgument = arguments[2];
-				}
-				else
-				{
-					expectedArgument = arguments[0];
-					actualArgument = arguments[1];
-				}
-			}
-			else
-			{
-				actualArgument = arguments[0];
-				expectedArgument = arguments[1];
-			}
-			final PsiElement copy = expectedArgument.copy();
-			expectedArgument.replace(actualArgument);
-			actualArgument.replace(copy);
-		}
-	}
+    @Override
+    public boolean isEnabledByDefault() {
+        return false;
+    }
 
-	@Nonnull
-	@Override
-	public String getGroupDisplayName()
-	{
-		return "TestNG";
-	}
+    @Nonnull
+    @Override
+    public LocalizeValue getDisplayName() {
+        return LocalizeValue.localizeTODO("Misordered 'assertEquals()' arguments");
+    }
 
-	@Override
-	public boolean isEnabledByDefault()
-	{
-		return false;
-	}
+    @Nonnull
+    @Override
+    public PsiElementVisitor buildVisitorImpl(
+        @Nonnull ProblemsHolder holder,
+        boolean isOnTheFly,
+        LocalInspectionToolSession session,
+        Object o
+    ) {
+        return new MisorderedAssertEqualsParametersVisitor(holder);
+    }
 
-	@Nonnull
-	@Override
-	public String getDisplayName()
-	{
-		return "Misordered 'assertEquals()' arguments";
-	}
+    private static class MisorderedAssertEqualsParametersVisitor extends JavaElementVisitor {
 
-	@Nonnull
-	@Override
-	public PsiElementVisitor buildVisitorImpl(@Nonnull ProblemsHolder holder, boolean isOnTheFly, LocalInspectionToolSession session, Object o)
-	{
-		return new MisorderedAssertEqualsParametersVisitor(holder);
-	}
+        private final ProblemsHolder myProblemsHolder;
 
-	private static class MisorderedAssertEqualsParametersVisitor extends JavaElementVisitor
-	{
+        public MisorderedAssertEqualsParametersVisitor(ProblemsHolder problemsHolder) {
+            myProblemsHolder = problemsHolder;
+        }
 
-		private final ProblemsHolder myProblemsHolder;
+        @Override
+        public void visitMethodCallExpression(@Nonnull PsiMethodCallExpression expression) {
+            super.visitMethodCallExpression(expression);
+            final PsiReferenceExpression methodExpression = expression.getMethodExpression();
+            final String methodName = methodExpression.getReferenceName();
+            if (!"assertEquals".equals(methodName) && !"assertEqualsNoOrder".equals(methodName) &&
+                !"assertNotEquals".equals(methodName) && !"assertArrayEquals".equals(methodName)) {
+                return;
+            }
+            final PsiMethod method = expression.resolveMethod();
+            if (method == null) {
+                return;
+            }
+            final PsiManager manager = expression.getManager();
+            final Project project = manager.getProject();
+            final GlobalSearchScope scope = GlobalSearchScope.allScope(project);
+            final PsiType stringType = PsiType.getJavaLangString(manager, scope);
+            final PsiExpressionList argumentList = expression.getArgumentList();
+            final PsiExpression[] arguments = argumentList.getExpressions();
+            if (arguments.length < 2) {
+                return;
+            }
+            final PsiClass containingClass = method.getContainingClass();
+            final PsiExpression expectedArgument;
+            final PsiExpression actualArgument;
+            if (InheritanceUtil.isInheritor(containingClass, "org.testng.AssertJUnit")) {
+                final PsiType firstArgumentType = arguments[0].getType();
+                if (stringType.equals(firstArgumentType) && arguments.length > 2) {
+                    expectedArgument = arguments[1];
+                    actualArgument = arguments[2];
+                }
+                else {
+                    expectedArgument = arguments[0];
+                    actualArgument = arguments[1];
+                }
+            }
+            else if (InheritanceUtil.isInheritor(containingClass, "org.testng.Assert")) {
+                actualArgument = arguments[0];
+                expectedArgument = arguments[1];
+            }
+            else {
+                return;
+            }
+            if (expectedArgument == null || actualArgument == null) {
+                return;
+            }
+            if (isLiteralOrConstant(expectedArgument)) {
+                return;
+            }
+            if (!isLiteralOrConstant(actualArgument)) {
+                return;
+            }
+            final PsiElement referenceNameElement = methodExpression.getReferenceNameElement();
+            if (referenceNameElement != null) {
+                myProblemsHolder.registerProblem(referenceNameElement, "Arguments to <code>#ref()</code> in wrong order #loc",
+                    new FlipParametersFix()
+                );
+            }
+            else {
+                myProblemsHolder.registerProblem(methodExpression, "Arguments to <code>#ref()</code> in wrong order #loc",
+                    new FlipParametersFix()
+                );
+            }
+        }
 
-		public MisorderedAssertEqualsParametersVisitor(ProblemsHolder problemsHolder)
-		{
-			myProblemsHolder = problemsHolder;
-		}
-
-		@Override
-		public void visitMethodCallExpression(@NotNull PsiMethodCallExpression expression)
-		{
-			super.visitMethodCallExpression(expression);
-			final PsiReferenceExpression methodExpression = expression.getMethodExpression();
-			@NonNls final String methodName = methodExpression.getReferenceName();
-			if(!"assertEquals".equals(methodName) && !"assertEqualsNoOrder".equals(methodName) &&
-					!"assertNotEquals".equals(methodName) && !"assertArrayEquals".equals(methodName))
-			{
-				return;
-			}
-			final PsiMethod method = expression.resolveMethod();
-			if(method == null)
-			{
-				return;
-			}
-			final PsiManager manager = expression.getManager();
-			final Project project = manager.getProject();
-			final GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-			final PsiType stringType = PsiType.getJavaLangString(manager, scope);
-			final PsiExpressionList argumentList = expression.getArgumentList();
-			final PsiExpression[] arguments = argumentList.getExpressions();
-			if(arguments.length < 2)
-			{
-				return;
-			}
-			final PsiClass containingClass = method.getContainingClass();
-			final PsiExpression expectedArgument;
-			final PsiExpression actualArgument;
-			if(InheritanceUtil.isInheritor(containingClass, "org.testng.AssertJUnit"))
-			{
-				final PsiType firstArgumentType = arguments[0].getType();
-				if(stringType.equals(firstArgumentType) && arguments.length > 2)
-				{
-					expectedArgument = arguments[1];
-					actualArgument = arguments[2];
-				}
-				else
-				{
-					expectedArgument = arguments[0];
-					actualArgument = arguments[1];
-				}
-			}
-			else if(InheritanceUtil.isInheritor(containingClass, "org.testng.Assert"))
-			{
-				actualArgument = arguments[0];
-				expectedArgument = arguments[1];
-			}
-			else
-			{
-				return;
-			}
-			if(expectedArgument == null || actualArgument == null)
-			{
-				return;
-			}
-			if(isLiteralOrConstant(expectedArgument))
-			{
-				return;
-			}
-			if(!isLiteralOrConstant(actualArgument))
-			{
-				return;
-			}
-			final PsiElement referenceNameElement = methodExpression.getReferenceNameElement();
-			if(referenceNameElement != null)
-			{
-				myProblemsHolder.registerProblem(referenceNameElement, "Arguments to <code>#ref()</code> in wrong order #loc",
-						new FlipParametersFix());
-			}
-			else
-			{
-				myProblemsHolder.registerProblem(methodExpression, "Arguments to <code>#ref()</code> in wrong order #loc",
-						new FlipParametersFix());
-			}
-		}
-
-		private static boolean isLiteralOrConstant(PsiExpression expression)
-		{
-			if(expression instanceof PsiLiteralExpression)
-			{
-				return true;
-			}
-			else if(expression instanceof PsiNewExpression)
-			{
-				final PsiNewExpression newExpression = (PsiNewExpression) expression;
-				final PsiExpressionList argumentList = newExpression.getArgumentList();
-				if(argumentList == null)
-				{
-					return true;
-				}
-				for(PsiExpression argument : argumentList.getExpressions())
-				{
-					if(!isLiteralOrConstant(argument))
-					{
-						return false;
-					}
-				}
-				return true;
-			}
-			if(!(expression instanceof PsiReferenceExpression))
-			{
-				return false;
-			}
-			final PsiReferenceExpression referenceExpression = (PsiReferenceExpression) expression;
-			final PsiElement target = referenceExpression.resolve();
-			if(!(target instanceof PsiField))
-			{
-				return false;
-			}
-			final PsiField field = (PsiField) target;
-			return field.hasModifierProperty(PsiModifier.STATIC) && field.hasModifierProperty(PsiModifier.FINAL);
-		}
-	}
+        private static boolean isLiteralOrConstant(PsiExpression expression) {
+            if (expression instanceof PsiLiteralExpression) {
+                return true;
+            }
+            else if (expression instanceof PsiNewExpression) {
+                final PsiNewExpression newExpression = (PsiNewExpression) expression;
+                final PsiExpressionList argumentList = newExpression.getArgumentList();
+                if (argumentList == null) {
+                    return true;
+                }
+                for (PsiExpression argument : argumentList.getExpressions()) {
+                    if (!isLiteralOrConstant(argument)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            if (!(expression instanceof PsiReferenceExpression)) {
+                return false;
+            }
+            final PsiReferenceExpression referenceExpression = (PsiReferenceExpression) expression;
+            final PsiElement target = referenceExpression.resolve();
+            if (!(target instanceof PsiField)) {
+                return false;
+            }
+            final PsiField field = (PsiField) target;
+            return field.hasModifierProperty(PsiModifier.STATIC) && field.hasModifierProperty(PsiModifier.FINAL);
+        }
+    }
 }
